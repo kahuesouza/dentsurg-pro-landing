@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;background:oklch(0.98 0.003 80);color:oklch(0.18 0.005 80);font-family:'Inter',system-ui,-apple-system,sans-serif;}
+    a{color:oklch(0.55 0.1 220);text-decoration:none;}
+    a:hover{color:oklch(0.45 0.1 220);}
+    *{box-sizing:border-box;}
+  </style>
+</helmet>
+<div style="background:oklch(0.98 0.003 80);position:relative;">
+  <div style="position:fixed;top:0;left:0;right:0;display:flex;align-items:center;justify-content:space-between;padding:20px 32px;z-index:20;opacity:{{ navOpacity }};pointer-events:none;">
+    <img src="uploads/logo_svg_cvdentus.svg" alt="CV Dentus" style="height:26px;width:auto;" />
+    <img src="uploads/dentsurg-pro-logo.png" alt="DentSurg Pro" style="height:20px;width:auto;filter:invert(1);" />
+  </div>
+
+  <div ref="{{ trackRef }}" style="position:relative;height:420vh;">
+    <div style="position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:oklch(0.98 0.003 80);">
+
+      <video ref="{{ videoRef }}" src="uploads/DS_PRO_HEADER.mp4" muted playsinline preload="auto" style="{{ videoStyle }}"></video>
+      <div style="{{ overlayStyle }}"></div>
+      <div style="{{ sideGradientStyle }}"></div>
+      <div style="{{ closingScrimStyle }}"></div>
+      <div style="{{ gradientStyle }}"></div>
+
+      <div style="{{ titleStyle }}">
+        <img src="uploads/dentsurg-pro-logo.png" alt="DentSurg Pro" style="width:min(60vw,620px);height:auto;" />
+      </div>
+
+      <div style="{{ benefitsWrapStyle }}">
+        <div style="font-size:12px;font-weight:600;letter-spacing:0.14em;color:oklch(0.75 0.1 220);margin-bottom:20px;">POR QUE DENTSURG PRO</div>
+        <sc-for list="{{ benefits }}" as="b" hint-placeholder-count="3">
+          <div style="{{ b.style }}">
+            <div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:6px;">{{ b.title }}</div>
+            <div style="font-size:16px;line-height:1.5;color:rgba(255,255,255,0.75);">{{ b.text }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="{{ specsWrapStyle }}">
+        <div style="font-size:12px;font-weight:600;letter-spacing:0.14em;color:oklch(0.75 0.1 220);margin-bottom:20px;">ESPECIFICAÇÕES</div>
+        <sc-for list="{{ specs }}" as="s" hint-placeholder-count="5">
+          <div style="{{ s.style }}">
+            <div style="font-size:17px;font-weight:700;color:#fff;margin-bottom:4px;">{{ s.title }}</div>
+            <div style="font-size:14px;line-height:1.5;color:rgba(255,255,255,0.7);">{{ s.text }}</div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="{{ closingStyle }}">
+        <div style="font-size:min(6vw,56px);font-weight:800;letter-spacing:-0.02em;color:#fff;text-align:center;">O Futuro vibra diferente.</div>
+        <img src="uploads/logo_svg_cvdentus.svg" alt="CV Dentus" style="height:22px;width:auto;margin-top:24px;filter:brightness(0) invert(1);display:block;margin-left:auto;margin-right:auto;" />
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  trackRef = React.createRef();
+  videoRef = React.createRef();
+  state = { progress: 0 };
+
+  componentDidMount() {
+    this.onScroll = this.onScroll.bind(this);
+    window.addEventListener('scroll', this.onScroll, { passive: true });
+    const v = this.videoRef.current;
+    if (v) {
+      v.addEventListener('loadedmetadata', () => {
+        this.duration = v.duration;
+        v.pause();
+        this.compute();
+      });
+      if (v.readyState >= 1) { this.duration = v.duration; v.pause(); }
+    }
+    this.compute();
+  }
+  componentWillUnmount() {
+    window.removeEventListener('scroll', this.onScroll);
+    if (this._raf) cancelAnimationFrame(this._raf);
+  }
+  onScroll() {
+    if (this._raf) return;
+    this._raf = requestAnimationFrame(() => { this._raf = null; this.compute(); });
+  }
+  compute() {
+    const el = this.trackRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const total = el.offsetHeight - window.innerHeight;
+    const raw = total > 0 ? (-rect.top) / total : 0;
+    const progress = this.clamp01(raw);
+    if (Math.abs(progress - this.state.progress) > 0.0015) this.setState({ progress });
+    const v = this.videoRef.current;
+    if (v && this.duration) v.currentTime = progress * this.duration;
+  }
+  clamp01(x) { return Math.max(0, Math.min(1, x)); }
+  lerp(a, b, t) { return a + (b - a) * t; }
+  phaseOpacity(p, start, end, fade) {
+    if (p < start || p > end) return 0;
+    if (p < start + fade) return (p - start) / fade;
+    if (p > end - fade) return (end - p) / fade;
+    return 1;
+  }
+
+  renderVals() {
+    const p = this.state.progress;
+    const closingFade = this.clamp01((p - 0.78) / 0.2);
+    const overlayOp = this.lerp(0, 0.5, this.clamp01((p - 0.14) / 0.18)) * (1 - closingFade);
+    const sideGradientOp = this.lerp(0, 1, this.clamp01((p - 0.14) / 0.18)) * (1 - closingFade);
+    const closingScrimOp = closingFade * 0.5;
+
+    const navOpacity = this.clamp01((p - 0.03) / 0.05);
+
+    const titleOp = this.phaseOpacity(p, -0.06, 0.2, 0.06);
+    const titleTy = (1 - titleOp) * -16;
+
+    const benefitsMaster = this.phaseOpacity(p, 0.2, 0.5, 0.07);
+    const specsMaster = this.phaseOpacity(p, 0.5, 0.78, 0.07);
+    const closingOp = this.phaseOpacity(p, 0.8, 1.0, 0.08);
+    const closingTy = (1 - closingOp) * 20;
+
+    const benefitData = [
+      { title: 'Corte Inteligente', text: 'Precisão onde importa. Segurança onde faz diferença. O ultrassom piezoelétrico corta estruturas mineralizadas preservando tecidos moles, oferecendo procedimentos mais previsíveis e minimamente invasivos.' },
+      { title: 'Visibilidade Total', text: 'Campo cirúrgico limpo do início ao fim. A irrigação sincronizada reduz o aquecimento e favorece uma cavitação eficiente, mantendo excelente visualização durante todo o procedimento.' },
+      { title: 'Projetado para Alta Performance', text: 'Tecnologia que acompanha sua rotina. Design compacto, touchscreen intuitiva, LED integrado e pedal sem fio entregam conforto operacional sem abrir mão da potência.' },
+    ];
+    const specData = [
+      { title: 'Frequência Adaptativa', text: 'Ajuste inteligente da potência para diferentes aplicações clínicas.' },
+      { title: 'Protocolos Inteligentes', text: 'Programas dedicados para osso cortical, medular e tecido misto.' },
+      { title: 'Irrigação Independente', text: 'Fluxo preciso para melhor refrigeração e excelente visibilidade.' },
+      { title: 'Design Clínico', text: 'Peça de mão leve, equilibrada e totalmente autoclavável.' },
+      { title: 'Touchscreen Inteligente', text: 'Memória de configurações para iniciar cada procedimento com rapidez.' },
+    ];
+
+    const benefits = benefitData.map((b, i) => ({
+      title: b.title, text: b.text,
+      style: `opacity:${benefitsMaster};transform:translateY(${(1 - benefitsMaster) * 18 + i * 4}px);margin-bottom:26px;transition:transform 0.05s linear;`,
+    }));
+    const specs = specData.map((s, i) => ({
+      title: s.title, text: s.text,
+      style: `opacity:${specsMaster};transform:translateY(${(1 - specsMaster) * 16 + i * 3}px);padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.2);`,
+    }));
+
+    return {
+      trackRef: this.trackRef,
+      videoRef: this.videoRef,
+      navOpacity,
+      videoStyle: `position:absolute;top:50%;left:50%;width:100vw;height:100vh;object-fit:cover;transform:translate(-50%,-50%);z-index:1;`,
+      overlayStyle: `position:absolute;inset:0;background:#000;opacity:${overlayOp};z-index:2;pointer-events:none;`,
+      sideGradientStyle: `position:absolute;inset:0;background:linear-gradient(to right, rgba(0,0,0,0) 40%, rgba(0,0,0,0.55) 100%);opacity:${sideGradientOp};z-index:2;pointer-events:none;`,
+      closingScrimStyle: `position:absolute;left:0;right:0;bottom:0;height:40%;background:linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,0.65));opacity:${closingScrimOp};z-index:2;pointer-events:none;`,
+      gradientStyle: `position:absolute;inset:0;background:linear-gradient(to bottom, rgba(0,0,0,0.35), rgba(0,0,0,0) 40%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.3));opacity:${titleOp};z-index:2;pointer-events:none;`,
+      titleStyle: `position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:6vh;z-index:3;opacity:${titleOp};transform:translateY(${titleTy}px);pointer-events:none;`,
+      benefitsWrapStyle: `position:absolute;right:7%;top:50%;transform:translateY(-50%);width:380px;z-index:3;pointer-events:none;opacity:${benefitsMaster};`,
+      specsWrapStyle: `position:absolute;right:7%;top:50%;transform:translateY(-50%);width:420px;z-index:3;pointer-events:none;opacity:${specsMaster};`,
+      closingStyle: `position:absolute;bottom:10%;left:0;right:0;z-index:3;opacity:${closingOp};transform:translateY(${closingTy}px);pointer-events:none;`,
+      benefits, specs,
+    };
+  }
+}
+
+</script>
+</body>
+</html>
