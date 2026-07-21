@@ -23,10 +23,10 @@
     <img src="uploads/dentsurg-pro-logo.png" alt="DentSurg Pro" style="height:20px;width:auto;filter:invert(1);" />
   </div>
 
-  <div ref="{{ trackRef }}" style="position:relative;height:420vh;">
+  <div ref="{{ trackRef }}" style="position:relative;height:560vh;">
     <div style="position:sticky;top:0;height:100vh;width:100%;overflow:hidden;background:oklch(0.98 0.003 80);">
 
-      <video ref="{{ videoRef }}" src="uploads/DS_PRO_HEADER.mp4" muted playsinline preload="auto" style="{{ videoStyle }}"></video>
+      <video ref="{{ videoRef }}" src="uploads/LP-dc37a228.mp4" muted playsinline preload="auto" style="{{ videoStyle }}"></video>
       <div style="{{ overlayStyle }}"></div>
       <div style="{{ sideGradientStyle }}"></div>
       <div style="{{ closingScrimStyle }}"></div>
@@ -37,11 +37,11 @@
       </div>
 
       <div style="{{ benefitsWrapStyle }}">
-        <div style="font-size:12px;font-weight:600;letter-spacing:0.14em;color:oklch(0.75 0.1 220);margin-bottom:20px;">POR QUE DENTSURG PRO</div>
+        <div style="font-size:12px;font-weight:600;letter-spacing:0.14em;color:oklch(0.75 0.1 220);margin-bottom:20px;">POR QUE ESCOLHER O DENTSURG PRO?</div>
         <sc-for list="{{ benefits }}" as="b" hint-placeholder-count="3">
           <div style="{{ b.style }}">
-            <div style="font-size:22px;font-weight:700;color:#fff;margin-bottom:6px;">{{ b.title }}</div>
-            <div style="font-size:16px;line-height:1.5;color:rgba(255,255,255,0.75);">{{ b.text }}</div>
+            <div style="{{ b.titleStyle }}">{{ b.title }}</div>
+            <div style="{{ b.textStyle }}">{{ b.text }}</div>
           </div>
         </sc-for>
       </div>
@@ -50,15 +50,15 @@
         <div style="font-size:12px;font-weight:600;letter-spacing:0.14em;color:oklch(0.75 0.1 220);margin-bottom:20px;">ESPECIFICAÇÕES</div>
         <sc-for list="{{ specs }}" as="s" hint-placeholder-count="5">
           <div style="{{ s.style }}">
-            <div style="font-size:17px;font-weight:700;color:#fff;margin-bottom:4px;">{{ s.title }}</div>
-            <div style="font-size:14px;line-height:1.5;color:rgba(255,255,255,0.7);">{{ s.text }}</div>
+            <div style="{{ s.titleStyle }}">{{ s.title }}</div>
+            <div style="{{ s.textStyle }}">{{ s.text }}</div>
           </div>
         </sc-for>
       </div>
 
       <div style="{{ closingStyle }}">
-        <div style="font-size:min(6vw,56px);font-weight:800;letter-spacing:-0.02em;color:#fff;text-align:center;">O Futuro vibra diferente.</div>
-        <img src="uploads/logo_svg_cvdentus.svg" alt="CV Dentus" style="height:22px;width:auto;margin-top:24px;filter:brightness(0) invert(1);display:block;margin-left:auto;margin-right:auto;" />
+        <div style="font-size:min(7.5vw,72px);font-weight:800;letter-spacing:-0.02em;color:#fff;text-align:center;">O Futuro vibra diferente.</div>
+        <img src="uploads/logo_svg_cvdentus.svg" alt="CV Dentus" style="height:34px;width:auto;margin-top:30px;filter:brightness(0) invert(1);display:block;margin-left:auto;margin-right:auto;" />
       </div>
 
     </div>
@@ -70,40 +70,100 @@
 class Component extends DCLogic {
   trackRef = React.createRef();
   videoRef = React.createRef();
-  state = { progress: 0 };
+  state = { progress: 0, viewportWidth: typeof window !== 'undefined' ? window.innerWidth : 1440 };
 
   componentDidMount() {
     this.onScroll = this.onScroll.bind(this);
+    this.onResize = () => this.setState({ viewportWidth: window.innerWidth });
+    window.addEventListener('resize', this.onResize);
     window.addEventListener('scroll', this.onScroll, { passive: true });
     const v = this.videoRef.current;
     if (v) {
-      v.addEventListener('loadedmetadata', () => {
-        this.duration = v.duration;
-        v.pause();
-        this.compute();
-      });
-      if (v.readyState >= 1) { this.duration = v.duration; v.pause(); }
+      const getDuration = () => {
+        if (isFinite(v.duration) && v.duration > 0) return v.duration;
+        if (v.seekable && v.seekable.length) return v.seekable.end(v.seekable.length - 1);
+        return 0;
+      };
+      let started = false;
+      const startPreload = () => {
+        if (started) return;
+        started = true;
+        this.duration = getDuration();
+        const finish = () => { v.pause(); this._preloaded = true; this.compute(); };
+        v.addEventListener('ended', finish, { once: true });
+        const p = v.play();
+        if (p && p.catch) p.catch(finish);
+      };
+      v.addEventListener('loadedmetadata', startPreload);
+      v.addEventListener('durationchange', () => { this.duration = getDuration(); });
+      if (v.readyState >= 1) startPreload();
     }
     this.compute();
   }
   componentWillUnmount() {
     window.removeEventListener('scroll', this.onScroll);
+    window.removeEventListener('resize', this.onResize);
     if (this._raf) cancelAnimationFrame(this._raf);
   }
   onScroll() {
-    if (this._raf) return;
-    this._raf = requestAnimationFrame(() => { this._raf = null; this.compute(); });
+    this.updateTarget();
+    if (!this._raf) this._raf = requestAnimationFrame(() => this.tick());
   }
-  compute() {
+  updateTarget() {
     const el = this.trackRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const total = el.offsetHeight - window.innerHeight;
     const raw = total > 0 ? (-rect.top) / total : 0;
-    const progress = this.clamp01(raw);
-    if (Math.abs(progress - this.state.progress) > 0.0015) this.setState({ progress });
+    this._target = this.clamp01(raw);
+  }
+  tick() {
+    if (this._target === undefined) this.updateTarget();
+    const current = this.state.progress;
+    const next = this.lerp(current, this._target, 0.02);
+    const done = Math.abs(next - this._target) < 0.0008;
+    const value = done ? this._target : next;
+    this.applyProgress(value);
+    if (!done) {
+      this._raf = requestAnimationFrame(() => this.tick());
+    } else {
+      this._raf = null;
+    }
+  }
+  applyProgress(progress) {
+    if (Math.abs(progress - this.state.progress) > 0.0002) this.setState({ progress });
     const v = this.videoRef.current;
-    if (v && this.duration) v.currentTime = progress * this.duration;
+    if (!v || !this.duration || !this._preloaded) return;
+    this._pendingSeek = progress * this.duration;
+    if (this._seeking) return;
+    this.seekVideo(v);
+  }
+  seekVideo(v) {
+    if (this._pendingSeek === undefined) return;
+    const target = this._pendingSeek;
+    this._pendingSeek = undefined;
+    if (Math.abs(v.currentTime - target) < 0.001) {
+      if (this._pendingSeek !== undefined) this.seekVideo(v);
+      return;
+    }
+    this._seeking = true;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      v.removeEventListener('seeked', onSeeked);
+      clearTimeout(timer);
+      this._seeking = false;
+      if (this._pendingSeek !== undefined) this.seekVideo(v);
+    };
+    const onSeeked = finish;
+    const timer = setTimeout(finish, 250);
+    v.addEventListener('seeked', onSeeked);
+    v.currentTime = target;
+  }
+  compute() {
+    this.updateTarget();
+    this.applyProgress(this._target);
   }
   clamp01(x) { return Math.max(0, Math.min(1, x)); }
   lerp(a, b, t) { return a + (b - a) * t; }
@@ -116,6 +176,7 @@ class Component extends DCLogic {
 
   renderVals() {
     const p = this.state.progress;
+    const isMobile = this.state.viewportWidth < 760;
     const closingFade = this.clamp01((p - 0.78) / 0.2);
     const overlayOp = this.lerp(0, 0.5, this.clamp01((p - 0.14) / 0.18)) * (1 - closingFade);
     const sideGradientOp = this.lerp(0, 1, this.clamp01((p - 0.14) / 0.18)) * (1 - closingFade);
@@ -126,9 +187,9 @@ class Component extends DCLogic {
     const titleOp = this.phaseOpacity(p, -0.06, 0.2, 0.06);
     const titleTy = (1 - titleOp) * -16;
 
-    const benefitsMaster = this.phaseOpacity(p, 0.2, 0.5, 0.07);
-    const specsMaster = this.phaseOpacity(p, 0.5, 0.78, 0.07);
-    const closingOp = this.phaseOpacity(p, 0.8, 1.0, 0.08);
+    const benefitsMaster = this.phaseOpacity(p, 0.2, 0.62, 0.05);
+    const specsMaster = this.phaseOpacity(p, 0.62, 0.85, 0.05);
+    const closingOp = this.clamp01((p - 0.87) / 0.06);
     const closingTy = (1 - closingOp) * 20;
 
     const benefitData = [
@@ -144,13 +205,28 @@ class Component extends DCLogic {
       { title: 'Touchscreen Inteligente', text: 'Memória de configurações para iniciar cada procedimento com rapidez.' },
     ];
 
-    const benefits = benefitData.map((b, i) => ({
-      title: b.title, text: b.text,
-      style: `opacity:${benefitsMaster};transform:translateY(${(1 - benefitsMaster) * 18 + i * 4}px);margin-bottom:26px;transition:transform 0.05s linear;`,
-    }));
+    const benefitTitleSize = isMobile ? 18 : 22;
+    const benefitTextSize = isMobile ? 14 : 16;
+    const specTitleSize = isMobile ? 15 : 17;
+    const specTextSize = isMobile ? 13 : 14;
+
+    const benefitSlice = 0.42 / benefitData.length;
+    const specSlice = 0.28 / specData.length;
+
+    const benefits = benefitData.map((b, i) => {
+      const itemOp = this.phaseOpacity(p, 0.2 + i * benefitSlice, 0.2 + (i + 1) * benefitSlice, benefitSlice * 0.35);
+      return {
+        title: b.title, text: b.text,
+        style: `opacity:${itemOp};position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;transform:translateY(${(1 - itemOp) * 14}px);`,
+        titleStyle: `font-size:${benefitTitleSize}px;font-weight:700;color:#fff;margin-bottom:6px;`,
+        textStyle: `font-size:${benefitTextSize}px;line-height:1.5;color:rgba(255,255,255,0.75);`,
+      };
+    });
     const specs = specData.map((s, i) => ({
       title: s.title, text: s.text,
-      style: `opacity:${specsMaster};transform:translateY(${(1 - specsMaster) * 16 + i * 3}px);padding:14px 0;border-bottom:1px solid rgba(255,255,255,0.2);`,
+      style: `opacity:${specsMaster};transform:translateY(${(1 - specsMaster) * 16 + i * 3}px);padding:${isMobile ? 10 : 14}px 0;border-bottom:1px solid rgba(255,255,255,0.2);`,
+      titleStyle: `font-size:${specTitleSize}px;font-weight:700;color:#fff;margin-bottom:4px;`,
+      textStyle: `font-size:${specTextSize}px;line-height:1.5;color:rgba(255,255,255,0.7);`,
     }));
 
     return {
@@ -163,9 +239,13 @@ class Component extends DCLogic {
       closingScrimStyle: `position:absolute;left:0;right:0;bottom:0;height:40%;background:linear-gradient(to bottom, rgba(0,0,0,0), rgba(0,0,0,0.65));opacity:${closingScrimOp};z-index:2;pointer-events:none;`,
       gradientStyle: `position:absolute;inset:0;background:linear-gradient(to bottom, rgba(0,0,0,0.35), rgba(0,0,0,0) 40%, rgba(0,0,0,0) 60%, rgba(0,0,0,0.3));opacity:${titleOp};z-index:2;pointer-events:none;`,
       titleStyle: `position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding-top:6vh;z-index:3;opacity:${titleOp};transform:translateY(${titleTy}px);pointer-events:none;`,
-      benefitsWrapStyle: `position:absolute;right:7%;top:50%;transform:translateY(-50%);width:380px;z-index:3;pointer-events:none;opacity:${benefitsMaster};`,
-      specsWrapStyle: `position:absolute;right:7%;top:50%;transform:translateY(-50%);width:420px;z-index:3;pointer-events:none;opacity:${specsMaster};`,
-      closingStyle: `position:absolute;bottom:10%;left:0;right:0;z-index:3;opacity:${closingOp};transform:translateY(${closingTy}px);pointer-events:none;`,
+      benefitsWrapStyle: isMobile
+        ? `position:absolute;left:6%;right:6%;top:16%;bottom:16%;width:auto;z-index:3;pointer-events:none;`
+        : `position:absolute;right:7%;top:50%;bottom:16%;width:380px;height:260px;z-index:3;pointer-events:none;opacity:${benefitsMaster};`,
+      specsWrapStyle: isMobile
+        ? `position:absolute;left:6%;right:6%;top:50%;transform:translateY(-50%);width:auto;z-index:3;pointer-events:none;opacity:${specsMaster};`
+        : `position:absolute;right:7%;top:50%;transform:translateY(-50%);width:420px;z-index:3;pointer-events:none;opacity:${specsMaster};`,
+      closingStyle: `position:absolute;bottom:10%;left:0;right:0;padding:0 6%;z-index:3;opacity:${closingOp};transform:translateY(${closingTy}px);pointer-events:none;`,
       benefits, specs,
     };
   }
